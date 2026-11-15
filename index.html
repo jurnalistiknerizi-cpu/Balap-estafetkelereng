@@ -247,7 +247,7 @@ function posFor(t,k,r){r.rotation.y=k%2?Math.PI:0;r.position.set(t.laneX+xo(t,k)
 const cur=t=>t.runners[t.leg%t.n];
 function putMarble(t,x,z){t.mb.position.set(x*R*.75,BY,-BZ-z*R*.75)}
 function giveMarble(t){cur(t).add(t.mb);t.mb.quaternion.set(0,0,0,1);t.m={x:0,z:0,vx:0,vz:0,u:0,nz:0};t.v=0;putMarble(t,0,0)}
-function placeLeg(t){posFor(t,t.leg,cur(t));t.p=0;t.jy=0;t.jv=0;t.jmp=0;giveMarble(t);if(G&&G.obs)obsReset(t)}
+function placeLeg(t){t.lx=0;posFor(t,t.leg,cur(t));t.p=0;t.jy=0;t.jv=0;t.jmp=0;giveMarble(t);if(G&&G.obs)obsReset(t)}
 
 function mkTeam(name,col,hex,laneX,n,legs,ai,idx,pl){
  const t={name,hex,laneX,n,legs,ai,idx,k:K[idx],leg:0,p:0,v:0,state:'wait',timer:0,drops:0,runners:[],done:false,finish:0,vr:diff,m:null,fv:new T.Vector3(),hs:null,he:null};
@@ -295,10 +295,15 @@ function stepAI(t,dt,time){
  const vr=t.v/VMAX,w=vr*.5;putMarble(t,Math.sin(time*6+t.leg)*w,Math.sin(time*8.1)*w*.6);
  if(Math.random()<.3*Math.pow(vr,4)*dt)startQuizAI(t)}
 
+const LAT_V=2.3,LAT_MAX=2.0,OBW=1.0;
+function steer(t,dt){const kk=t.k,k=t.leg,ax=(kk.r-kk.l)*(k%2?-1:1),base=xo(t,k);
+ t.lv=(t.lv||0)+((ax*LAT_V)-(t.lv||0))*Math.min(1,dt*9);
+ t.lx=Math.max(-LAT_MAX-base,Math.min(LAT_MAX-base,(t.lx||0)+t.lv*dt))}
 function upTeam(t,dt){
  const k=t.leg,r=cur(t),dir=dirOf(k);jumpStep(t,dt);
  if(t.state==='wait'){t.timer-=dt;if(t.timer<=0){t.state='run';t.vr=diff+(Math.random()-.5)*.12}}
  else if(t.state==='run'){
+  if(!t.ai)steer(t,dt);
   (t.ai?stepAI:stepPlayer)(t,dt,G.time);if(t.state==='run')slipChk(t,dt);
   if(t.state==='run'){t.p+=t.v*dt;if(G.obs)obsCheck(t);
    if(t.state==='run'&&t.p>=L){t.p=L;t.v=0;
@@ -321,7 +326,7 @@ function upTeam(t,dt){
   if(t.ph2==='quiz'){if(!rdTick(t,dt))t.timer-=dt;if(t.timer<=0){if(t.ai)tumGet(t,rr()<.95-diff*.6);else answer(t,-1)}}
   else if(t.ph2==='up'){t.lf-=dt/.55;if(t.lf<=0){t.lf=0;tumEnd(t)}}}
  else if(t.state==='hand'){}
- if(t.state!=='hand'||t.n>1)r.position.z=(k%2?-L:0)+dir*t.p;
+ if(t.state!=='hand'||t.n>1){r.position.z=(k%2?-L:0)+dir*t.p;r.position.x=t.laneX+xo(t,k)+(t.lx||0)}
  const u=r.userData,vr=t.v/VMAX;u.ph+=t.v*dt*2.2;
  if(t.state==='run'||t.state==='fall'||t.v>0){const s=Math.sin(u.ph)*.9*Math.min(1,vr*1.5);
   u.legs[0].rotation.x=s;u.legs[1].rotation.x=-s;u.arms[0].rotation.x=-s*.6;u.arms[1].rotation.x=s*.6}
@@ -344,7 +349,7 @@ function showWinner(cb){const w=G.win,el=$('wn');let done=0;
  el.hidden=false;el.onclick=go;wnT=setTimeout(go,3900)}
 
 function focus(t){const kc=Math.min(t.leg+(t.state==='hand'?1:0),t.legs-1);
- return{kc,x:t.laneX+xo(t,kc),z:t.state==='hand'?(kc%2?-L:0):cur(t).position.z,dir:dirOf(kc)}}
+ return{kc,x:t.laneX+xo(t,kc)+(t.state==='hand'?0:(t.lx||0)*.5),z:t.state==='hand'?(kc%2?-L:0):cur(t).position.z,dir:dirOf(kc)}}
 const CAMS=['auto','follow','shoulder','wide','close','front','side','low','drone'],CN=['Otomatis','Follow','Belakang bahu','Wide','Close-up','Depan','Samping','Rendah','Drone'];
 const AUTO1=['follow','shoulder','side','close','low','drone','wide','front'],AUTO2=['follow','wide','side','drone','low'];let camSel=0;
 function camCalc(){
@@ -566,7 +571,7 @@ function startFcut(t){const r=cur(t);G.fcut={t,time:0,d:2.3,x:r.position.x,z:r.p
  $('hud').style.visibility='hidden';$('cc').textContent='😵  '+(t.n>1?r.userData.name:t.name)+' terpeleset!';
  const e=$('cut');e.classList.remove('on');e.hidden=false;void e.offsetWidth;e.classList.add('on')}
 function upFcut(dt){const c=G.fcut,t=c.t,r=cur(t),d=c.dir,q=Math.min(1,c.time/c.d),V=(a,b,e)=>new T.Vector3(a,b,e);c.time+=dt;
- tumStep(t,dt);r.position.z=(t.leg%2?-L:0)+d*t.p;r.position.y=0;poseFx(t,r,r.userData,dt);
+ tumStep(t,dt);r.position.z=(t.leg%2?-L:0)+d*t.p;r.position.x=t.laneX+xo(t,t.leg)+(t.lx||0);r.position.y=0;poseFx(t,r,r.userData,dt);
  cam.position.copy(V(c.x+4.6-q*.8,1.2+.5*q,c.z-d*2.2+d*q*3.4));camLook.set(r.position.x,.7,r.position.z+d*.6);cam.lookAt(camLook);cam.fov=48-8*q;cam.updateProjectionMatrix();
  if(c.time>=c.d)endFcut()}
 function endFcut(){const t=G.fcut.t;G.fcut=null;$('hud').style.visibility='';$('cut').hidden=true;tumQuiz(t)}
@@ -1018,14 +1023,14 @@ function hitObs(t,ob){const v=t.v,r=cur(t);drop(t,v);t.v=Math.min(v,6)*.45;t.tf=
  msg('Nabrak rintangan! 💥 Ulang dari awal',1700);sfx('thud');fxBurst(r.position.x,r.position.z,16,4)}
 function obsCheck(t){const o=G.obs[t.leg];if(!o)return;
  for(const ob of o.list){if(ob.st>=2)continue;
-  if(ob.st===0&&t.p>=ob.p-.28){if(t.jy<ob.h-.03){hitObs(t,ob);return}ob.st=1}
-  if(ob.st===1&&t.p>=ob.p+.28){if(t.jy<ob.h-.03){hitObs(t,ob);return}ob.st=2}}}
+  if(ob.st===0&&t.p>=ob.p-.28){if(t.jy<ob.h-.03&&Math.abs(t.lx||0)<OBW){hitObs(t,ob);return}ob.st=1}
+  if(ob.st===1&&t.p>=ob.p+.28){if(t.jy<ob.h-.03&&Math.abs(t.lx||0)<OBW){hitObs(t,ob);return}ob.st=2}}}
 function jumpStep(t,dt){if(!t.jmp)return;
  if(t.state==='fall'||t.state==='tumble'||t.state==='hand'||t.state==='end'||t.state==='wait'){t.jy=0;t.jmp=0;return}
  t.jv-=14*dt;t.jy+=t.jv*dt;
  if(t.jy<=0){t.jy=0;t.jmp=0;const vr=t.v/VMAX,r=cur(t);if(t.m){t.m.vx+=(Math.random()-.5)*2.2*vr;t.m.vz+=.9*vr}fxBurst(r.position.x,r.position.z,6,2)}}
 function doJump(t){if(!G||G.mode!==1||G.phase!=='play'||G.cut||G.fcut||G.sal||t.state!=='run'||t.jmp)return;
- const o=G.obs&&G.obs[t.leg],bg=o&&o.list.find(ob=>ob.big&&ob.st===0&&ob.p-t.p>.8&&ob.p-t.p<9);
+ const o=G.obs&&G.obs[t.leg],bg=o&&Math.abs(t.lx||0)<OBW&&o.list.find(ob=>ob.big&&ob.st===0&&ob.p-t.p>.8&&ob.p-t.p<9);
  if(bg){startSal(t,bg);return}
  t.jmp=1;t.jv=5;if(t.m)t.m.vz-=.7*t.v/VMAX}
 function obsUi(dt){const t=G.teams[0];G.obs.forEach((o,i)=>{o.g.visible=i===t.leg;o.list.forEach(ob=>{if(ob.hit){const g=ob.dir*1.2;ob.m.rotation.x+=(g-ob.m.rotation.x)*(1-Math.exp(-9*dt))}})});
