@@ -200,7 +200,7 @@ const T=THREE,Y=new T.Vector3(0,1,0),L=40,VMAX=8,R=.3,HT=1.3,BY=1.9,BZ=1.05,$=i=
 const rd=new T.WebGLRenderer({antialias:true});rd.setPixelRatio(Math.min(devicePixelRatio,2));
 document.body.prepend(rd.domElement);rd.domElement.style.cssText='position:fixed;inset:0;width:100%;height:100%';
 const sc=new T.Scene();sc.background=new T.Color(0xa8d8f0);sc.fog=new T.Fog(0xa8d8f0,40,130);
-const cam=new T.PerspectiveCamera(60,1,.1,200);cam.position.set(0,4,8);
+const cam=new T.PerspectiveCamera(60,1,.1,420);cam.position.set(0,4,8);
 const hemi=new T.HemisphereLight(0xffffff,0x6a8a50,.95);sc.add(hemi);
 const sun=new T.DirectionalLight(0xffffff,.6);sun.position.set(10,20,5);sc.add(sun);
 function rsz(){rd.setSize(innerWidth,innerHeight);cam.aspect=innerWidth/innerHeight;cam.updateProjectionMatrix()}
@@ -349,7 +349,7 @@ function showWinner(cb){const w=G.win,el=$('wn');let done=0;
  el.hidden=false;el.onclick=go;wnT=setTimeout(go,3900)}
 
 function focus(t){const kc=Math.min(t.leg+(t.state==='hand'?1:0),t.legs-1);
- return{kc,x:t.laneX+xo(t,kc)+(t.state==='hand'?0:(t.lx||0)*.5),z:t.state==='hand'?(kc%2?-L:0):cur(t).position.z,dir:dirOf(kc)}}
+ return{kc,x:t.laneX,z:t.state==='hand'?(kc%2?-L:0):cur(t).position.z,dir:dirOf(kc)}}
 const CAMS=['auto','follow','shoulder','wide','close','front','side','low','drone'],CN=['Otomatis','Follow','Belakang bahu','Wide','Close-up','Depan','Samping','Rendah','Drone'];
 const AUTO1=['follow','shoulder','side','close','low','drone','wide','front'],AUTO2=['follow','wide','side','drone','low'];let camSel=0;
 function camCalc(){
@@ -589,6 +589,29 @@ function poseFx(t,r,u,dt){
 /* cuaca */
 const inSc=o=>{while(o){if(o===sc)return true;o=o.parent}return false};
 function wxPrune(){FLW=FLW.filter(inSc);FLW.forEach(m=>m.visible=FV)}
+/* --- Siluet pegunungan (semua arena) --- */
+const RG=new T.Group();sc.add(RG);
+const RDG={
+ 0:{c:[0x4d7a64,0x6a9399,0x8db0c2],h:.75,st:'hills'},
+ 1:{c:[0x3a506c,0x546c87,0x7b91aa],h:1.3,st:'peaks'},
+ 2:{c:[0x3b7c8c,0x63a0b1,0x91bfcd],h:.7,st:'hills'},
+ 3:{c:[0x536479,0x7384a0,0x98a8bf],h:1,st:'peaks'},
+ 4:{c:[0x94593a,0xba8254,0xd8a97b],h:.85,st:'mesa'}};
+const RFQ=[3,5,9,17,31,53],RFA=[1,.7,.45,.28,.17,.1];
+function ridgeH(th,ly,st){let v=0,n=0;for(let i=0;i<RFQ.length;i++){const a=RFA[i],q=RFQ[i],ph=ly*1.7+i*2.3;const w=Math.sin(q*th+ph);v+=a*(st==='peaks'?1-Math.abs(w):(w+1)/2);n+=a}
+ v/=n;if(st==='peaks')v=Math.pow(v,1.25);if(st==='hills')v=.25+.75*v;if(st==='mesa'){v=Math.min(1,Math.max(0,(v-.25)*2.2));v=Math.min(v,.62)/.62*.9+.1*v}return v}
+function setRidge(i){const P=RDG[i]||RDG[0];
+ while(RG.children.length){const o=RG.children.pop();o.geometry.dispose();o.material.dispose()}
+ RG.position.set(0,0,-L/2);
+ [0,1,2].forEach(ly=>{const N=360,R0=158+ly*13,H=(15+ly*8)*P.h,pos=new Float32Array((N+1)*6),idx=[];
+  for(let k=0;k<=N;k++){const th=k/N*Math.PI*2,h=ridgeH(th,ly,P.st)*H+2,x=Math.cos(th)*R0,z=Math.sin(th)*R0;
+   pos.set([x,-8,z,x,h,z],k*6)}
+  for(let k=0;k<N;k++){const a=k*2;idx.push(a,a+1,a+2,a+1,a+3,a+2)}
+  const g=new T.BufferGeometry();g.setAttribute('position',new T.BufferAttribute(pos,3));g.setIndex(idx);
+  const m=new T.MeshBasicMaterial({color:P.c[ly],side:T.DoubleSide,fog:false}),o=new T.Mesh(g,m);o.frustumCulled=false;o.renderOrder=-3+ly;
+  o.userData={base:new T.Color(P.c[ly]),mix:[.2,.4,.6][ly]};RG.add(o)})}
+function ridgeColor(){const k=.55+.45*Math.min(1,WS.hi),hz=Math.max(0,Math.min(.45,(150-WS.ff)/150*.7));
+ RG.children.forEach(o=>{const m=o.material.color;m.copy(o.userData.base).multiplyScalar(k).lerp(sc.background,Math.min(.92,o.userData.mix+hz))})}
 function wxUpdate(dt,tm){
  const P=WX[wxI],k=1-Math.exp(-dt*1.6),cx=cam.position.x,cy=cam.position.y,cz=cam.position.z;
  NF.forEach(f=>WS[f]+=(P[f]-WS[f])*k);CF.forEach(f=>WS[f].lerp(P[f],k));
@@ -597,7 +620,7 @@ function wxUpdate(dt,tm){
   if(LT.bolt){if(a>.26){sc.remove(LT.bolt);LT.bolt=null}else bmat.opacity=(a<.06||(a>.11&&a<.2))?1:.5}}else LT.fl=0;
  if(LT.fl!==LT.f){LT.f=LT.fl;$('fl').style.opacity=LT.fl*.45}
  const fl=LT.fl;
- sc.background.copy(WS.sky).lerp(WH2,fl*.55);sc.fog.color.copy(sc.background);sc.fog.near=WS.fn;sc.fog.far=WS.ff;
+ sc.background.copy(WS.sky).lerp(WH2,fl*.55);sc.fog.color.copy(sc.background);sc.fog.near=WS.fn;sc.fog.far=WS.ff;ridgeColor();
  hemi.color.copy(WS.hs);hemi.groundColor.copy(WS.hg);hemi.intensity=WS.hi+fl*1.4;sun.color.copy(WS.sc);sun.intensity=WS.si+fl*.8;
  clouds.forEach((c,i)=>{const o=Math.max(0,Math.min(1,WS.cl-i))*.93;c.visible=o>.01;if(c.visible){c.userData.m.opacity=o;c.userData.m.color.copy(WS.cc);c.scale.setScalar(WS.cs)}});
  sunS.material.opacity=WS.sun*(1-fl);sunS.visible=WS.sun>.02;
@@ -868,7 +891,7 @@ function envAnim(dt,tm){if(!EG)return;const A=ENVA;
  A.foam.forEach((f,i)=>{f.position.x=f.userData.x+Math.sin(tm*1.1+i*1.3)*.45;f.material.opacity=f.userData.o*(.65+.35*Math.sin(tm*1.6+i))});
  A.boats.forEach(b=>{b.g.position.y=.05+Math.sin(tm*1.3+b.ph)*.07;b.g.rotation.z=Math.sin(tm*1.1+b.ph)*.06});
  A.bob.forEach(b=>b.m.position.y=Math.max(0,Math.sin(tm*5+b.ph))*.14)}
-function setEnv(i){envI=i;ENVA={bob:[],boats:[],sea:null,foam:[]};
+function setEnv(i){envI=i;setRidge(i);ENVA={bob:[],boats:[],sea:null,foam:[]};
  if(EG){sc.remove(EG);EG.traverse(o=>{if(o.geometry)o.geometry.dispose()})}
  EG=new T.Group();sc.add(EG);
  GRM.map=i?groundTex(i):GRM0;GRM.needsUpdate=true;const s=i?2.2:1;GM.scale.set(s,s,1);SNP.scale.set(s,s,1);
